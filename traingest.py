@@ -16,7 +16,7 @@ set_random_seed(2)
 batch_size = 32
 
 #Prepare input data
-classes = ['Gesture_0','Gesture_1','Gesture_2','Gesture_3','Gesture_4','Gesture_5','Gesture_6','Gesture_7','Gesture_8','Gesture_9']
+classes = ['Fist', 'Thumbs Up','Stop','L', 'Point']
 num_classes = len(classes)
 
 # 20% of the data will automatically be used for validation
