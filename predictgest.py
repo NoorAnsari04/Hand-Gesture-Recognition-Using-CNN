@@ -1,4 +1,5 @@
 import tensorflow as tf
+tf.disable_v2_behavior()
 import numpy as np
 import os,cv2
 import sys,argparse
@@ -13,12 +14,17 @@ p_frame=-1
 thresholdframes=50
 
 
+# Gesture labels list — add your gesture names here in order of model output indices
+gestures = ['Fist', 'Thumbs Up','Stop','L', 'Point']
+
+
 ## Let us restore the saved model 
 sess = tf.Session()
 # Step-1: Recreate the network graph. At this step only graph is created.
-saver = tf.train.import_meta_graph('C:/Users/Raj Shah/Downloads/AHD_Project/handgest_1.meta')
+saver = tf.train.import_meta_graph('C:\\Users\\RT\\Hand-Gesture-Recognition-Using-CNN\\handgest_1.meta')
+
 # Step-2: Now let's load the weights saved using the restore method.
-saver.restore(sess, tf.train.latest_checkpoint('./'))
+saver.restore(sess, 'C:\\Users\\RT\\Hand-Gesture-Recognition-Using-CNN\\handgest_1')
 
 # Accessing the default graph which we have restored
 graph = tf.get_default_graph()
@@ -39,7 +45,7 @@ def predict(frame,y_test_images):
     num_channels=3
     images = []
     image=frame
-    cv2.imshow('test',image)
+    # cv2.imshow('test',image)
     # Resizing the image to our desired size and preprocessing will be done exactly as done during training
     image = cv2.resize(image, (image_size, image_size),0,0, cv2.INTER_LINEAR)
     images.append(image)
@@ -100,10 +106,23 @@ cap.set(5, 400)
 h,s,v = 150,150,150
 i=0
 while(i<1000000):
-    ret, frame = cap.read()
-        
-    cv2.rectangle(frame, (300,300), (100,100), (0,255,0),0)
-    crop_frame=frame[100:300,100:300]
+    ret, frame = cap.read() 
+    if not ret: 
+        break
+    frame = cv2.flip(frame, 1)
+
+    box_size = 200
+    frame_height, frame_width = frame.shape[:2]
+
+    x1 = frame_width // 2 - box_size // 2
+    y1 = frame_height // 2 - box_size // 2
+    x2 = x1 + box_size
+    y2 = y1 + box_size
+
+    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    crop_frame = frame[y1:y2, x1:x2]
+    
+    
      #Blur the image
     #blur = cv2.blur(crop_frame,(3,3))
     blur = cv2.GaussianBlur(crop_frame, (3,3), 0)
@@ -114,42 +133,71 @@ while(i<1000000):
     #Create a binary image with where white will be skin colors and rest is black
     mask2 = cv2.inRange(hsv,np.array([2,50,50]),np.array([15,255,255]))
     med=cv2.medianBlur(mask2,5)
+
+    med = cv2.resize(med, (50, 50))
+    med = np.stack((med,) * 3)
+    med = np.rollaxis(med, axis=1, start=0)
+    med = np.rollaxis(med, axis=2, start=0)
+    M = cv2.getRotationMatrix2D((25, 25), 270, 1)
+    med = cv2.warpAffine(med, M, (50, 50))
+    med = np.fliplr(med)
+
+    
+    ans = predict(med, y_test_images)
+    pred_index = np.argmax(ans)
+    confidence = ans[0][pred_index]
+    gesture_name = gestures[pred_index]
+
+    c_frame = pred_index
+    if c_frame == p_frame:
+        counter += 1
+    else:
+        counter = 0
+    p_frame = c_frame
+
+    if counter == thresholdframes:
+        print(f"Gesture: {gesture_name} with confidence: {confidence:.4f}")
+        counter = 0
+
+    text = f'{gesture_name} ({confidence*100:.2f}%)'
+    cv2.putText(frame, text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX,
+                1, (0, 255, 0), 2)
     
     ##Displaying frames
     cv2.imshow('main',frame)
     cv2.imshow('masked',med)
 
-    ##resizing the image
-    med=cv2.resize(med,(50,50))
-    ##Making it 3 channel
-    med=np.stack((med,)*3)
-    ##adjusting rows,columns as per x
-    med=np.rollaxis(med,axis=1,start=0)
-    med=np.rollaxis(med,axis=2,start=0)
-    ##Rotating and flipping correctly as per training image
-    M = cv2.getRotationMatrix2D((25,25),270,1)
-    med = cv2.warpAffine(med,M,(50,50))
-    med=np.fliplr(med)
-    ##converting expo to float
-    np.set_printoptions(formatter={'float_kind':'{:f}'.format})
-    ##printing index of max prob value
-    ans=predict(med,y_test_images)
-    #print(ans)
-    #print(np.argmax(max(ans)))
+    # ##resizing the image
+    # med=cv2.resize(med,(50,50))
+    # ##Making it 3 channel
+    # med=np.stack((med,)*3)
+    # ##adjusting rows,columns as per x
+    # med=np.rollaxis(med,axis=1,start=0)
+    # med=np.rollaxis(med,axis=2,start=0)
+    # ##Rotating and flipping correctly as per training image
+    # M = cv2.getRotationMatrix2D((25,25),270,1)
+    # med = cv2.warpAffine(med,M,(50,50))
+    # med=np.fliplr(med)
+    # ##converting expo to float
+    # np.set_printoptions(formatter={'float_kind':'{:f}'.format})
+    # ##printing index of max prob value
+    # ans=predict(med,y_test_images)
+    # #print(ans)
+    # #print(np.argmax(max(ans)))
 
-    #Comparing for 50 continuous frames
-    c_frame=np.argmax(max(ans))
-    if(c_frame==p_frame):
-        counter=counter+1
-        p_frame=c_frame
-        if (counter==thresholdframes):
-            print(ans)
-            print("Gesture:"+str(c_frame))
-            counter=0
-            i=0
-    else:
-        p_frame=c_frame
-        counter=0
+    # #Comparing for 50 continuous frames
+    # c_frame=np.argmax(max(ans))
+    # if(c_frame==p_frame):
+    #     counter=counter+1
+    #     p_frame=c_frame
+    #     if (counter==thresholdframes):
+    #         print(ans)
+    #         print("Gesture:"+str(c_frame))
+    #         counter=0
+    #         i=0
+    # else:
+    #     p_frame=c_frame
+    #     counter=0
     
  #close the output video by pressing 'ESC'
     k = cv2.waitKey(2) & 0xFF
